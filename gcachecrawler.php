@@ -15,13 +15,6 @@ class GCacheCrawler
     protected $debug_level = 1;
 
     /**
-     * Set to false to disable get HTML from google cache and get from site itself
-     *
-     * @var  Integer 
-     */
-    protected $google_cache_use = true;
-
-    /**
      * Maximum consecutive tentatives to ask google cache for page
      *
      * @var Integer
@@ -35,14 +28,23 @@ class GCacheCrawler
      */
     protected $error_count_now = 0;
     protected $save_path = '';
+    protected $force_html_sufix = true;
+    protected $google_cache_sufix = '&hl=pt-BR&ct=clnk&gl=br&client=ubuntu';
+
+    /**
+     * Set to false to disable get HTML from google cache and get from site itself
+     *
+     * @var  Integer 
+     */
+    protected $google_cache_use = true;
+    protected $ignore = [];
+    protected $ignore_file = 'ignore.txt';
     protected $info_file_processed = 'gcachecrawler_processed.txt';
     protected $info_file_lasttry = 'gcachecrawler_lastitem.txt';
     protected $info_file_doneok = 'gcachecrawler_doneok.txt';
     protected $info_file_done404 = 'gcachecrawler_done404.txt';
     protected $info_file_error = 'gcachecrawler_error.txt';
     protected $info_file_raw = 'gcachecrawler_raw.html';
-    protected $cache_sufix = '&hl=pt-BR&ct=clnk&gl=br&client=ubuntu';
-    protected $force_html_sufix = true;
 
     /**
      * Fake user agent. Default curl agent will get you banned
@@ -90,6 +92,9 @@ class GCacheCrawler
      * @var Integer
      */
     protected $wait_max = 30;
+    protected $proxy_file = 'proxy.txt';
+    protected $proxy_enabled = false;
+    protected $proxy_list = 'proxy.txt';
 
     /**
      * Initialize values
@@ -142,6 +147,19 @@ class GCacheCrawler
             echo gmdate("Y-m-d\TH:i:s\Z") . 'ERROR: url_file not found! (' . $this->url_file . ')';
             die;
         }
+        if ($this->proxy_enabled) {
+            if (is_file($this->proxy_file)) {
+                $input = file_get_contents($this->url_file);
+                if ($input) {
+                    $this->proxy_list = array_filter(explode("\n", $input));
+                    if (empty($this->proxy_list)) {
+                        echo gmdate("Y-m-d\TH:i:s\Z") . 'ERROR: proxy_list empty (' . $this->proxy_list . ')';
+                        die;
+                    }
+                }
+            }
+        }
+
         $this->executeCacheRequest();
     }
 
@@ -219,7 +237,8 @@ class GCacheCrawler
     protected function getSavePath($url_without_base)
     {
         echo gmdate("Y-m-d\TH:i:s\Z") . ': getSavePath ' . $url_without_base . PHP_EOL;
-        if (empty(trim($url_without_base, '/')) || $url_without_base === $this->save_path) {
+		$isempty = trim($url_without_base, '/');
+        if (empty($isempty) || $url_without_base === $this->save_path) {
             echo gmdate("Y-m-d\TH:i:s\Z") . ': getSavePath IS INDEX PAGE ' . PHP_EOL;
             return $this->save_path . '/index.html';
         } else {
@@ -236,6 +255,16 @@ class GCacheCrawler
         }
     }
 
+    protected function getProxy()
+    {
+        $proxy_now = $this->proxy_list[0];
+        echo gmdate("Y-m-d\TH:i:s\Z") . ': getProxy ' . $proxy_now . PHP_EOL;
+        //curl_setopt($curl_handler, CURLOPT_PROXY, $proxy_now);
+        
+        //return $curl_handler;
+        return $proxy_now;
+    }
+
     /**
      * 
      * @param   String   $url
@@ -250,6 +279,7 @@ class GCacheCrawler
         echo gmdate("Y-m-d\TH:i:s\Z") . ': URL GET, STATUS ' . $this->status_code . '; URL: ' . $url . '; SAVE_ON: ' . $save_on . PHP_EOL;
         switch ($this->status_code) {
             case 200:
+                //case 302:
                 if ($this->google_cache_use) {
                     $this->saveHtml($this->clearGoogleCacheHeader($content), $save_on);
                 } else {
@@ -285,6 +315,13 @@ class GCacheCrawler
         echo gmdate("Y-m-d\TH:i:s\Z") . ': getUrlContents ' . $url . PHP_EOL;
 
         $ch = curl_init();
+
+        if ($this->proxy_enabled) {
+            $proxy_now = $this->getProxy($ch);
+            curl_setopt($ch, CURLOPT_PROXY, $proxy_now);
+        }
+
+
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $certificate);
         curl_setopt($ch, CURLOPT_URL, $url);
@@ -298,6 +335,8 @@ class GCacheCrawler
         if (curl_errno($ch)) {
             echo gmdate("Y-m-d\TH:i:s\Z") . ': ERROR getUrlContents CURL_ERROR ' . curl_error($ch) . PHP_EOL;
         }
+        
+        //print_r(curl_getinfo($ch));
 
         curl_close($ch);
         return $content;
@@ -361,5 +400,7 @@ if (empty($argv) || count($argv) < 2) {
         $gcsr->set('google_cache_use', false);
     }
 }
+
+$gcsr->set('google_cache_use', false);
 
 $gcsr->set('base_site', $argv[1])->set('url_file', $argv[2])->execute();
