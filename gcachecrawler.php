@@ -55,7 +55,7 @@ class GCacheCrawler
      *
      * @var  Integer
      */
-    protected $status_code = null;
+    protected $status_code = -1;
     protected $url_file = null;
     protected $url_stack = [];
 
@@ -171,19 +171,21 @@ class GCacheCrawler
 
             $result = $this->getUrl($url_to_html_page, $this->getSavePath($url));
             if ($result === false) {
-                $this->error_count_now + 1;
+                $this->error_count_now += 1;
                 if ($this->error_count_now > $this->error_count_max) {
                     echo gmdate("Y-m-d\TH:i:s\Z") . ': Too many errors. Stoping now' . PHP_EOL;
                     die;
                 }
                 $sleep = $this->wait_error * $this->error_count_now;
-                echo gmdate("Y-m-d\TH:i:s\Z") . ': ERROR 5XX!' . $sleep . 's' . PHP_EOL;
+                echo gmdate("Y-m-d\TH:i:s\Z") . ': ERROR 5XX! ' . $sleep . 's' . PHP_EOL;
             } else {
                 $sleep = rand($this->wait_min, $this->wait_max);
                 echo gmdate("Y-m-d\TH:i:s\Z") . ': wait for ' . $sleep . 's' . PHP_EOL;
             }
             sleep($sleep);
         }
+        echo gmdate("Y-m-d\TH:i:s\Z") . ': Google Cache Site Recover finished' . PHP_EOL;
+        die;
     }
 
     /**
@@ -260,6 +262,8 @@ class GCacheCrawler
      */
     protected function getUrlContents($url, $certificate = FALSE)
     {
+        echo gmdate("Y-m-d\TH:i:s\Z") . ': getUrlContents ' . $url . PHP_EOL;
+
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $certificate);
@@ -270,6 +274,9 @@ class GCacheCrawler
 
         if ($this->debug_level) {
             file_put_contents(getcwd() . '/' . $this->info_file_raw, $content);
+        }
+        if (curl_errno($ch)) {
+            echo gmdate("Y-m-d\TH:i:s\Z") . ': ERROR getUrlContents CURL_ERROR ' . curl_error($ch) . PHP_EOL;
         }
 
         curl_close($ch);

@@ -1,5 +1,6 @@
 nbproject
 output/
+urls.txt
 gcachecrawler_processed.txt
 gcachecrawler_lastitem.txt
 gcachecrawler_doneok.txt
