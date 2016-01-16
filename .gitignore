@@ -1,1 +1,7 @@
 nbproject
+output/
+gcachecrawler_processed.txt
+gcachecrawler_lastitem.txt
+gcachecrawler_doneok.txt
+gcachecrawler_done404.txt
+gcachecrawler_raw.html

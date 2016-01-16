@@ -14,18 +14,19 @@ class GCacheCrawler
     protected $base_site = '';
     protected $debug_level = 1;
     protected $save_path = '';
+    protected $info_file_processed = 'gcachecrawler_processed.txt';
     protected $info_file_lasttry = 'gcachecrawler_lastitem.txt';
     protected $info_file_doneok = 'gcachecrawler_doneok.txt';
     protected $info_file_done404 = 'gcachecrawler_done404.txt';
+    protected $info_file_error = 'gcachecrawler_error.txt';
     protected $info_file_raw = 'gcachecrawler_raw.html';
     protected $sufix = '&hl=pt-BR&ct=clnk&gl=br&client=ubuntu';
     protected $status_code = null;
     protected $url_stack = [];
 
-    /*
+    /**
      * Initialize values
      */
-
     function __construct($argv = null)
     {
         $this->save_path = getcwd() . '/output';
@@ -37,13 +38,13 @@ class GCacheCrawler
             }
         }
     }
-    /*
+
+    /**
      * Return contents of url
      * @var         string      $url
      * @var         string      $certificate path to certificate if is https URL
      * @return      string
      */
-
     protected function getUrlContents($url, $certificate = FALSE)
     {
         $ch = curl_init(); //Inicializar a sessao           
@@ -53,20 +54,49 @@ class GCacheCrawler
         $content = curl_exec($ch); //Execute
         $this->status_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
+        if ($this->debug_level) {
+            file_put_contents(getcwd() . '/' . $this->info_file_raw, $content);
+        }
+
         curl_close($ch); //Feche 
         return $content;
     }
 
+    /**
+     * 
+     * @param   String   $url
+     * @param   String   $save_on
+     */
     protected function getUrl($url, $save_on)
     {
 
         $content = $this->getUrlContents($url);
         echo 'getUrl: STATUS ' . $this->status_code . '; URL:' . $url . '; SAVE_ON ' . $save_on . PHP_EOL;
-        if ($this->status_code === 200) {
-            $this->saveUrl($content, $save_on);
+        switch ($this->status_code) {
+            case 200:
+                $this->saveUrl($content, $save_on);
+                if ($this->debug_level) {
+                    file_put_contents(getcwd() . '/' . $this->info_file_doneok, $url . PHP_EOL, FILE_APPEND);
+                }
+                break;
+            case 404:
+                if ($this->debug_level) {
+                    file_put_contents(getcwd() . '/' . $this->info_file_done404, $url . PHP_EOL, FILE_APPEND);
+                }
+                break;
+            default:
+                if ($this->debug_level) {
+                    file_put_contents(getcwd() . '/' . $this->info_file_error, $url . PHP_EOL, FILE_APPEND);
+                }
+                break;
         }
     }
 
+    /**
+     * 
+     * @param   String   $url_without_base
+     * @return  String
+     */
     protected function getSavePath($url_without_base)
     {
         if (empty(trim('/', $url_without_base))) {
@@ -76,6 +106,11 @@ class GCacheCrawler
         }
     }
 
+    /**
+     * 
+     * @param   String   $content
+     * @param   String   $save_on
+     */
     protected function saveUrl($content, $save_on)
     {
         echo 'saveUrl :' . $save_on . PHP_EOL;
@@ -88,36 +123,42 @@ class GCacheCrawler
         }
     }
 
+    /**
+     * Execute
+     */
     public function execute()
     {
         print_r($this);
         if ($this->url_stack) {
             foreach ($this->url_stack AS $url) {
+                if ($this->debug_level) {
+                    file_put_contents(getcwd() . '/' . $this->info_file_processed, $url . PHP_EOL, FILE_APPEND);
+                }
                 $this->getUrl($this->base_cache . $this->base_site . $url, $this->getSavePath($url));
                 sleep(3);
             }
         }
     }
-    /*
+
+    /**
      * Return generic variable
      * 
      * @var        string          $name: name of var to return
      *
      * return       mixed          $this->$name: value of var
      */
-
     public function get($name)
     {
         return $this->$name;
     }
-    /*
+
+    /**
      * Set one generic variable the desired value
      * 
      * @var        string          $name: name of var to return
      *
      * return       object          $this
      */
-
     public function set($name, $value)
     {
         $this->$name = $value;

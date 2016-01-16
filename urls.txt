@@ -1,3 +1,4 @@
 /
 /sobre.html
 /joomla/10-erros-comuns-que-iniciantes-no-cms-joomla-cometem.html
+/page-error
