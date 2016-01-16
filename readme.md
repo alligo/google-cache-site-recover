@@ -1,3 +1,1 @@
-# gcachecrawler
-
-./gcachecrawler.php
+# Google Cache Site Recover - v0.2
