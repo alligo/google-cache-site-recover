@@ -21,22 +21,22 @@ class GCacheCrawler
     protected $info_file_error = 'gcachecrawler_error.txt';
     protected $info_file_raw = 'gcachecrawler_raw.html';
     protected $sufix = '&hl=pt-BR&ct=clnk&gl=br&client=ubuntu';
+    protected $user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Ubuntu Chromium/47.0.2526.73 Chrome/47.0.2526.73 Safari/537.36';
     protected $status_code = null;
+    protected $url_file = null;
     protected $url_stack = [];
+    protected $wait_error = 300;
+    protected $wait_myhost = 1;
+    protected $wait_min = 10;
+    protected $wait_max = 30;
+    protected $error_max_count = 5;
 
     /**
      * Initialize values
      */
-    function __construct($argv = null)
+    function __construct()
     {
         $this->save_path = getcwd() . '/output';
-
-        if (is_file('urls.txt')) {
-            $input = file_get_contents('urls.txt');
-            if ($input) {
-                $this->url_stack = array_filter(explode("\n", $input));
-            }
-        }
     }
 
     /**
@@ -47,11 +47,12 @@ class GCacheCrawler
      */
     protected function getUrlContents($url, $certificate = FALSE)
     {
-        $ch = curl_init(); //Inicializar a sessao           
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1); //Retorne os dados em vez de imprimir em tela
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $certificate); //Check certificate if is SSL, default FALSE
-        curl_setopt($ch, CURLOPT_URL, $url); //Setar URL
-        $content = curl_exec($ch); //Execute
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $certificate);
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_USERAGENT, $this->user_agent);
+        $content = curl_exec($ch);
         $this->status_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
         if ($this->debug_level) {
@@ -129,13 +130,28 @@ class GCacheCrawler
     public function execute()
     {
         print_r($this);
+
+        echo gmdate("Y-m-d\TH:i:s\Z") . ': started' . PHP_EOL;
+
+        if (is_file($this->url_file)) {
+            $input = file_get_contents($this->url_file);
+            if ($input) {
+                $this->url_stack = array_filter(explode("\n", $input));
+            }
+        } else {
+            echo 'ERROR: url_file not found! (' . $this->url_file . ')';
+            die;
+        }
+
         if ($this->url_stack) {
             foreach ($this->url_stack AS $url) {
                 if ($this->debug_level) {
                     file_put_contents(getcwd() . '/' . $this->info_file_processed, $url . PHP_EOL, FILE_APPEND);
                 }
                 $this->getUrl($this->base_cache . $this->base_site . $url, $this->getSavePath($url));
-                sleep(3);
+                $sleep = rand($this->wait_min, $this->wait_max);
+                echo gmdate("Y-m-d\TH:i:s\Z") . ': wait for ' . $sleep . 's' . PHP_EOL;
+                sleep($sleep);
             }
         }
     }
@@ -166,5 +182,16 @@ class GCacheCrawler
     }
 }
 
+if (empty($argv) || count($argv) < 2) {
+    echo 'Usage: gcachecrawler.php http://site.com' . PHP_EOL;
+    echo '       1º param: site url (no / at the end)' . PHP_EOL;
+    echo '       2º param: file with urls (optimal, default to urls.txt' . PHP_EOL;
+    die;
+} else {
+    if (!isset($argv[2])) {
+        $argv[2] = 'urls.txt';
+    }
+}
 $gcc = new GCacheCrawler($argv);
-$gcc->set('base_site', 'http://www.fititnt.org')->execute();
+$gcc->set('base_site', $argv[1])->set('url_file', $argv[2])->execute();
+
