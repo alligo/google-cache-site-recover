@@ -41,7 +41,8 @@ class GCacheCrawler
     protected $info_file_done404 = 'gcachecrawler_done404.txt';
     protected $info_file_error = 'gcachecrawler_error.txt';
     protected $info_file_raw = 'gcachecrawler_raw.html';
-    protected $sufix = '&hl=pt-BR&ct=clnk&gl=br&client=ubuntu';
+    protected $cache_sufix = '&hl=pt-BR&ct=clnk&gl=br&client=ubuntu';
+    protected $force_html_sufix = true;
 
     /**
      * Fake user agent. Default curl agent will get you banned
@@ -58,6 +59,8 @@ class GCacheCrawler
     protected $status_code = -1;
     protected $url_file = null;
     protected $url_stack = [];
+    protected $request_count = 0;
+    protected $start_time = 0;
 
     /**
      * Time, in seconds, to wait if Google think that this is an automated
@@ -122,6 +125,7 @@ class GCacheCrawler
     public function execute()
     {
         //$this->debug_level && print_r($this);
+        $this->start_time = time();
 
         echo gmdate("Y-m-d\TH:i:s\Z") . ': Google Cache Site Recover version 0.2 started now' . PHP_EOL;
 
@@ -157,14 +161,21 @@ class GCacheCrawler
      */
     protected function executeCacheRequest()
     {
+        $reqs_per_hour = '---';
+
         foreach ($this->url_stack AS $url) {
             if ($this->debug_level) {
                 file_put_contents(getcwd() . '/' . $this->info_file_processed, $url . PHP_EOL, FILE_APPEND);
             }
+            $this->request_count += 1;
+            if ($this->request_count > 2) {
+                $reqs_per_hour = ((time() - $this->start_time) * $this->request_count) / 60;
+            }
+
             if ($this->google_cache_use) {
-                echo gmdate("Y-m-d\TH:i:s\Z") . ': REQUEST from Google Cache ' . $url . PHP_EOL;
+                echo gmdate("Y-m-d\TH:i:s\Z") . ': REQUEST n ' . $this->request_count . ' from Google Cache ' . $reqs_per_hour . ' req/h. Next URL: ' . $url . PHP_EOL;
             } else {
-                echo gmdate("Y-m-d\TH:i:s\Z") . ': REQUEST direct from site ' . $url . PHP_EOL;
+                echo gmdate("Y-m-d\TH:i:s\Z") . ': REQUEST n ' . $this->request_count . ' direct from site ' . $reqs_per_hour . ' req/h. Next URL: ' . $url . PHP_EOL;
             }
 
             $url_to_html_page = $this->google_cache_use ? $this->base_cache . $this->base_site . $url : $this->base_site . $url;
@@ -212,7 +223,16 @@ class GCacheCrawler
             echo gmdate("Y-m-d\TH:i:s\Z") . ': getSavePath IS INDEX PAGE ' . PHP_EOL;
             return $this->save_path . '/index.html';
         } else {
-            return $this->save_path . $url_without_base;
+            if ($this->force_html_sufix && !(
+                strpos($url_without_base, '.html') !== false ||
+                strpos($url_without_base, '.htm') !== false ||
+                strpos($url_without_base, '.php') !== false
+                )) {
+                echo gmdate("Y-m-d\TH:i:s\Z") . ': getSavePath FORCE HTML ' . PHP_EOL;
+                return $this->save_path . $url_without_base . '.html';
+            } else {
+                return $this->save_path . $url_without_base;
+            }
         }
     }
 
@@ -343,4 +363,3 @@ if (empty($argv) || count($argv) < 2) {
 }
 
 $gcsr->set('base_site', $argv[1])->set('url_file', $argv[2])->execute();
-
