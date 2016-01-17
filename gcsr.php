@@ -1,6 +1,13 @@
 #!/usr/bin/php
 
 <?php
+/*
+ * Google Cache Site Recover is a way to recover your site from Google Cache if you are out of luck and have no backups.
+ * 
+ * Requires PHP5.4+ and php-curl. No more dependencies. Just add this file, chmod +x and execute with params
+ * 
+ * Author: Emerson Rocha Luiz <emerson at alligo.com>
+ */
 
 class GoogleCacheSiteRecover
 {
@@ -13,6 +20,12 @@ class GoogleCacheSiteRecover
     protected $base_cache = 'http://webcache.googleusercontent.com/search?q=cache:';
     protected $base_site = '';
     protected $debug_level = 1;
+
+    /**
+     *
+     * @var  \CurlProxyHelper
+     */
+    protected $CurlProxyHelper;
 
     /**
      * Maximum consecutive tentatives to ask google cache for page
@@ -48,6 +61,8 @@ class GoogleCacheSiteRecover
 
     /**
      * Fake user agent. Default curl agent will get you banned
+     * 
+     * @deprecated
      *
      * @var String
      */
@@ -102,6 +117,7 @@ class GoogleCacheSiteRecover
     function __construct()
     {
         $this->save_path = getcwd() . '/output';
+        $this->cph = new CurlProxyHelper;
     }
 
     /**
@@ -167,7 +183,7 @@ class GoogleCacheSiteRecover
             }
         }
 
-        $this->executeCacheRequest();
+        $this->executePageRequest();
     }
 
     /**
@@ -175,16 +191,16 @@ class GoogleCacheSiteRecover
      *
      * @return string
      */
-    protected function executeAssetRequest()
+    protected function executePageAssets()
     {
         return '@todo';
     }
 
     /**
-     * For each URL to request, ask google cache
+     * Request page request (from Google Cache or, if specified, site itself)
      *
      */
-    protected function executeCacheRequest()
+    protected function executePageRequest()
     {
         $reqs_per_hour = '---';
 
@@ -203,7 +219,7 @@ class GoogleCacheSiteRecover
                 echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executeCacheRequest: Request nº ' . $this->request_count . ' of ' . $total
                 . ' from Google Cache ' . $reqs_per_hour . ' req/h. Next URL: ' . $url . PHP_EOL;
             } else {
-                echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executeCacheRequest: Request nº ' . $total
+                echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executeCacheRequest: Request nº ' . $this->request_count . ' of ' . $total
                 . ' direct from site ' . $reqs_per_hour . ' req/h. Next URL: ' . $url . PHP_EOL;
             }
 
@@ -219,6 +235,8 @@ class GoogleCacheSiteRecover
                 $sleep = $this->wait_error * $this->error_count_now;
                 echo gmdate("Y-m-d\TH:i:s\Z") . ': ALERT executeCacheRequest: ERROR 5XX or 3XX! ' . $sleep . 's' . PHP_EOL;
             } else {
+                $this->executePageAssets();
+
                 $sleep = rand($this->wait_min, $this->wait_max);
                 echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executeCacheRequest: wait for ' . $sleep . 's' . PHP_EOL;
             }
@@ -238,34 +256,6 @@ class GoogleCacheSiteRecover
     public function get($name)
     {
         return isset($this->$name) ? $this->$name : null;
-    }
-
-    /**
-     * @deprecated
-     * @param type $html_string
-     * @return array
-     */
-    public function getHtmlResources($html_string)
-    {
-        $assets = [
-            'js' => [],
-            'css' => [],
-            'links' => [],
-        ];
-        libxml_use_internal_errors(true); // HTML5 ¯\_(ツ)_/¯
-        $doc = new DOMDocument();
-        if ($doc->loadHTML($html_string)) {
-            $dom = simplexml_import_dom($doc);
-            $xpath = new DOMXPath($doc);
-            $images = $xpath->query("//img");
-            $js = $xpath->query("//script");
-            $css = $xpath->query("//link");
-            //$src = $nodes->item(0)->getAttribute('src');
-            var_dump($images, $js, $css);
-            //echo $html_string;
-        }
-
-        return $assets;
     }
 
     protected function getProxy()
@@ -305,7 +295,8 @@ class GoogleCacheSiteRecover
     }
 
     /**
-     * 
+     * Get page HTML
+     *
      * @param   String   $url
      * @param   String   $save_on
      * 
@@ -351,6 +342,8 @@ class GoogleCacheSiteRecover
 
     /**
      * Return contents of url
+     * 
+     * @deprecated
      *
      * @var         string      $url
      * @var         string      $certificate path to certificate if is https URL
@@ -358,33 +351,8 @@ class GoogleCacheSiteRecover
      */
     protected function getUrlContents($url, $certificate = FALSE)
     {
-        //echo gmdate("Y-m-d\TH:i:s\Z") . ': getUrlContents ' . $url . PHP_EOL;
-
-        $ch = curl_init();
-
-        if ($this->proxy_enabled) {
-            $proxy_now = $this->getProxy($ch);
-            curl_setopt($ch, CURLOPT_PROXY, $proxy_now);
-        }
-
-
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $certificate);
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_USERAGENT, $this->user_agent);
-        $content = curl_exec($ch);
-        $this->status_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-        if ($this->debug_level) {
-            file_put_contents(getcwd() . '/' . $this->info_file_raw, $content);
-        }
-        if (curl_errno($ch)) {
-            echo gmdate("Y-m-d\TH:i:s\Z") . ": \033[31mERROR\033[37m" . ' getUrlContents CURL_ERROR ' . curl_error($ch) . PHP_EOL;
-        }
-
-        //print_r(curl_getinfo($ch));
-
-        curl_close($ch);
+        $content = $this->cph->getUrlContents($url);
+        $this->status_code = $this->cph->status_code;
         return $content;
     }
 
@@ -469,6 +437,73 @@ class GoogleCacheSiteRecover
     {
         $this->$name = $value;
         return $this;
+    }
+}
+
+class CurlProxyHelper
+{
+
+    protected $proxy_enabled = false;
+    protected $proxy_list = [];
+    protected $debug_level = 1;
+    protected $check_ssl = false;
+    protected $url = '';
+    public $status_code = -1;
+
+    /**
+     * Fake user agent. Default curl agent will get you banned
+     *
+     * @var String
+     */
+    protected $user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Ubuntu Chromium/47.0.2526.73 Chrome/47.0.2526.73 Safari/537.36';
+
+    public function __construct()
+    {
+        ;
+    }
+
+    /**
+     * Return contents of url
+     *
+     * @var         string      $url
+     * @var         string      $certificate path to certificate if is https URL
+     * @return      string
+     */
+    public function getUrlContents($url = null)
+    {
+        if ($url === null) {
+            $url = $this->url;
+        } else {
+            $this->url = $url;
+        }
+        //echo gmdate("Y-m-d\TH:i:s\Z") . ': getUrlContents ' . $url . PHP_EOL;
+
+        $ch = curl_init();
+
+        if ($this->proxy_enabled) {
+            $proxy_now = $this->getProxy($ch);
+            curl_setopt($ch, CURLOPT_PROXY, $proxy_now);
+        }
+
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $this->check_ssl);
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_USERAGENT, $this->user_agent);
+        $content = curl_exec($ch);
+        $this->status_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        if ($this->debug_level) {
+            file_put_contents(getcwd() . '/' . 'curlproxyhelperdebug.txt', $content);
+        }
+        if (curl_errno($ch)) {
+            echo gmdate("Y-m-d\TH:i:s\Z") . ": \033[31mERROR\033[37m" . ' getUrlContents CURL_ERROR ' . curl_error($ch) . PHP_EOL;
+        }
+
+        //var_dump($content); die;
+        //print_r(curl_getinfo($ch));
+
+        curl_close($ch);
+        return $content;
     }
 }
 

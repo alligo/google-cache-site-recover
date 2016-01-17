@@ -2,6 +2,7 @@ nbproject
 output/
 urls.txt
 ignore.txt
+curlproxyhelperdebug.txt
 gcsr_processed.txt
 gcsr_lastitem.txt
 gcsr_doneok.txt
