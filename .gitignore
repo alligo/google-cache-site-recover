@@ -1,6 +1,7 @@
 nbproject
 output/
 urls.txt
+urls_test2.txt
 ignore.txt
 curlproxyhelperdebug.txt
 gcsr_processed.txt
@@ -8,5 +9,9 @@ gcsr_lastitem.txt
 gcsr_doneok.txt
 gcsr_done404.txt
 gcsr_error.txt
+gcsr_asset_ok.txt
+gcsr_asset_ignored.txt
+gcsr_asset_404.txt
+gcsr_asset_error.txt
 gcsr_raw.html
 *.zip

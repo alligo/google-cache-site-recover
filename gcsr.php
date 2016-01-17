@@ -12,6 +12,8 @@
 class GoogleCacheSiteRecover
 {
 
+    private $_lastcontent = null;
+
     /**
      * Base. Use if your list just have site path, not full url
      *
@@ -25,7 +27,7 @@ class GoogleCacheSiteRecover
      *
      * @var  \CurlProxyHelper
      */
-    protected $CurlProxyHelper;
+    protected $cph;
 
     /**
      * Maximum consecutive tentatives to ask google cache for page
@@ -58,6 +60,7 @@ class GoogleCacheSiteRecover
     protected $info_file_done404 = 'gcsr_done404.txt';
     protected $info_file_error = 'gcsr_error.txt';
     protected $info_file_raw = 'gcsr_raw.html';
+    protected $enable_assets_request = true;
 
     /**
      * Fake user agent. Default curl agent will get you banned
@@ -130,7 +133,7 @@ class GoogleCacheSiteRecover
     {
 
         if (strpos($string, 'style="position:relative;">') === false) {
-            echo gmdate("Y-m-d\TH:i:s\Z") . ": \033[31mERROR\033[37m" . ' clearGoogleCacheHeader: method is outdated. Please update me!';
+            echo gmdate("Y-m-d\TH:i:s\Z") . ": \033[31mERROR\033[37m" . ' clearGoogleCacheHeader: method is outdated. Please update me!' . PHP_EOL;
             return $string;
         } else {
             $parts = explode('style="position:relative;">', $string);
@@ -142,7 +145,7 @@ class GoogleCacheSiteRecover
                 $html_string = str_replace('<head>', '<head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">', $html_string);
             }
 
-            echo gmdate("Y-m-d\TH:i:s\Z") . ' DEBUG clearGoogleCacheHeader: cleared';
+            echo gmdate("Y-m-d\TH:i:s\Z") . ' DEBUG clearGoogleCacheHeader: cleared' . PHP_EOL;
             return $html_string;
         }
     }
@@ -187,13 +190,57 @@ class GoogleCacheSiteRecover
     }
 
     /**
-     * @todo finish this (fititnt, 2016-01-16 03:20)
+     * 
      *
      * @return string
      */
     protected function executePageAssets()
     {
-        return '@todo';
+
+        $htmlhelper = new HtmlHelper($this->_lastcontent);
+        if ($htmlhelper->isValid()) {
+            $htmlhelper->setBaseUrl($this->base_site);
+            $assets = array_filter(array_merge($htmlhelper->getLinkImages(), $htmlhelper->getLinkJavascript(), $htmlhelper->getLinkCSS()));
+            echo gmdate("Y-m-d\TH:i:s\Z") . ' INFO executePageAssets: possible local Assets found ' . count($assets) . PHP_EOL;
+            //var_dump($assets);
+            foreach ($assets AS $asset) {
+                if (!$this->isUrlIgnore($asset)) {
+                    $url = $this->base_site . $asset;
+                    $save_on = $this->save_path . $asset;
+                    $this->ignore[] = $asset;
+                    //var_dump($url, $save_on);
+                    $content = $this->cph->getUrlContents($url);
+                    switch ($this->cph->status_code) {
+
+                        case 200:
+                            $this->saveFile($content, $save_on);
+                            echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executePageAssets: 200 OK ' . $url . ', Sleep ' . $this->wait_myhost . PHP_EOL;
+                            if ($this->debug_level) {
+                                file_put_contents(getcwd() . '/gcsr_asset_ok.txt', $url . PHP_EOL, FILE_APPEND);
+                            }
+                            break;
+                        case 404:
+                            echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executePageAssets: 404 not found ' . $url . ', Sleep ' . $this->wait_myhost . PHP_EOL;
+                            if ($this->debug_level) {
+                                file_put_contents(getcwd() . '/gcsr_asset_404.txt', $url . PHP_EOL, FILE_APPEND);
+                            }
+                            break;
+                        default:
+                            echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executePageAssets: error ' . $this->cph->status_code . ' ' . $url . ', Sleep ' . $this->wait_myhost . PHP_EOL;
+                            if ($this->debug_level) {
+                                file_put_contents(getcwd() . '/gcsr_asset_error.txt', $url . PHP_EOL, FILE_APPEND);
+                            }
+                            break;
+                    }
+                    file_put_contents(getcwd() . '/gcsr_asset_ignored.txt', $asset . PHP_EOL, FILE_APPEND);
+                    if ($this->wait_myhost) {
+                        sleep($this->wait_myhost);
+                    }
+                }
+            }
+        } else {
+            echo gmdate("Y-m-d\TH:i:s\Z") . ': ALERT executePageAssets: not a valid HTML ' . PHP_EOL;
+        }
     }
 
     /**
@@ -207,6 +254,11 @@ class GoogleCacheSiteRecover
         $total = count($this->url_stack);
 
         foreach ($this->url_stack AS $url) {
+
+            if ($this->isUrlIgnore($url)) {
+                echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executeCacheRequest: ignoring ' . $url . PHP_EOL;
+            }
+
             if ($this->debug_level) {
                 file_put_contents(getcwd() . '/' . $this->info_file_processed, $url . PHP_EOL, FILE_APPEND);
             }
@@ -235,7 +287,11 @@ class GoogleCacheSiteRecover
                 $sleep = $this->wait_error * $this->error_count_now;
                 echo gmdate("Y-m-d\TH:i:s\Z") . ': ALERT executeCacheRequest: ERROR 5XX or 3XX! ' . $sleep . 's' . PHP_EOL;
             } else {
-                $this->executePageAssets();
+
+                if ($this->enable_assets_request) {
+                    $this->executePageAssets();
+                }
+
 
                 $sleep = rand($this->wait_min, $this->wait_max);
                 echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executeCacheRequest: wait for ' . $sleep . 's' . PHP_EOL;
@@ -306,21 +362,15 @@ class GoogleCacheSiteRecover
     {
 
         $content = $this->getUrlContents($url);
+        $this->_lastcontent = $content;
         echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO getUrl: Status ' . $this->status_code . '; URL: ' . $url . '; SAVE_ON: ' . $save_on . PHP_EOL;
         switch ($this->status_code) {
             case 200:
                 //case 302:
                 if ($this->google_cache_use) {
-                    $this->saveHtml($this->clearGoogleCacheHeader($content), $save_on);
+                    $this->saveFile($this->clearGoogleCacheHeader($content), $save_on);
                 } else {
-                    $this->saveHtml($content, $save_on);
-                }
-                $htmlhelper = new HtmlHelper($content);
-                if ($htmlhelper->isValid()) {
-                    $htmlhelper->setBaseUrl($this->base_site);
-                    //var_dump($htmlhelper->getLinkImages());
-                    //var_dump($htmlhelper->getLinkJavascript());
-                    //var_dump($htmlhelper->getLinkCSS());
+                    $this->saveFile($content, $save_on);
                 }
 
                 if ($this->debug_level) {
@@ -383,13 +433,32 @@ class GoogleCacheSiteRecover
             }
         }
         $data = array_unique(array_filter($data));
-        var_dump(count($data));
+        //var_dump(count($data));
         if (count($data)) {
             $this->$param = $data;
         } else {
             echo gmdate("Y-m-d\TH:i:s\Z") . ': WARNING importParam cannot import ' . json_encode($files);
         }
         return isset($this->$param) ? $this->$param : null;
+    }
+
+    /**
+     * Return if the ignore or file should be ignored to request again from server
+     *
+     * @param  String   $file_or_url
+     * @return boolean
+     */
+    protected function isUrlIgnore($file_or_url)
+    {
+        if ($this->ignore && count($this->ignore)) {
+            if (in_array($file_or_url, $this->ignore)) {
+                return true;
+            }
+            if (in_array(str_replace($this->base_site, '', $file_or_url), $this->ignore)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -411,19 +480,25 @@ class GoogleCacheSiteRecover
     }
 
     /**
-     * 
+     * Save file do disk
+     *
      * @param   String   $content
      * @param   String   $save_on
+     * 
+     * @returns Boolean
      */
-    protected function saveHtml($content, $save_on)
+    protected function saveFile($content, $save_on)
     {
-        //echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO saveHtml: ' . $save_on . PHP_EOL;
+        //echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO saveFile: ' . $save_on . PHP_EOL;
         if ($this->prepareFilePath($save_on)) {
-            //echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO saveHtml:  file_path OK :' . $save_on . PHP_EOL;
+            //echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO saveFile:  file_path OK :' . $save_on . PHP_EOL;
             if (!file_put_contents($save_on, $content)) {
-                echo gmdate("Y-m-d\TH:i:s\Z") . ": \033[31mERROR\033[37m" . ' saveHtml: cannot save :' . $save_on . PHP_EOL;
+                echo gmdate("Y-m-d\TH:i:s\Z") . ": \033[31mERROR\033[37m" . ' saveFile: cannot save :' . $save_on . PHP_EOL;
+                return false;
             }
+            return true;
         }
+        return false;
     }
 
     /**
@@ -548,13 +623,8 @@ class HtmlHelper
             $xpath = new DOMXPath($doc);
             $this->img_nodes = $xpath->query("//img");
             $this->js_nodes = $xpath->query("//script");
-            $this->css_nodes = $xpath->query("//link[@rel=stylesheet]");
             $this->css_nodes = $xpath->query("//link[@rel='stylesheet']");
-            //$this->css_nodes = $xpath->query("//link");
-            //var_dump($this->css_nodes); die;
-            //$src = $nodes->item(0)->getAttribute('src');
-            //var_dump($this->img_nodes, $this->js_nodes, $this->css_nodes);
-            //echo $html_string;
+
             $this->is_valid = true;
         }
     }
@@ -567,10 +637,7 @@ class HtmlHelper
     public function getLinkCSS($loca_only = true)
     {
         $links = [];
-        //var_dump(($this->css_nodes->item(0)));
-        //var_dump($this->css_nodes[0]);
-        //var_dump(count($this->css_nodes));
-        //die('oioi');
+
         foreach ($this->css_nodes AS $node) {
             $href = $node->getAttribute('href');
 
@@ -578,12 +645,12 @@ class HtmlHelper
                 // Empty or remote url
                 continue;
             }
+            $src = str_replace($this->base_url, '', $src);
+            //var_dump('>>>', $src, $this->base_url);
             //var_dump($node);
 
-            $links[] = $href;
+            $links[] = $src;
         }
-        //var_dump(count($this->css_nodes));
-        //var_dump($links);
         return $links;
     }
 
@@ -591,11 +658,16 @@ class HtmlHelper
     {
         $urls = [];
         foreach ($this->img_nodes AS $node) {
+            $src = $node->getAttribute('src');
             // No inline images
-            if (strpos($node->getAttribute('src'), 'base64') === false) {
-                
+            if (empty($src) || strpos($src, 'base64') !== false || (strpos($src, '//') !== false && strpos($src, $this->base_url) === false)) {
+                // @todo terminar
+                continue;
             }
+            $src = str_replace($this->base_url, '', $src);
+            $urls[] = $src;
         }
+        return $urls;
     }
 
     public function getLinkJavascript($loca_only = true)
@@ -640,10 +712,10 @@ if (empty($argv) || count($argv) < 2) {
         $gcsr->set('google_cache_use', false);
     }
 }
-//echo gmdate("Y-m-d\TH:i:s\Z") . ": \033[31mERROR\033[37m" . ' saveHtml: cannot save :' . $save_on . PHP_EOL;
+//echo gmdate("Y-m-d\TH:i:s\Z") . ": \033[31mERROR\033[37m" . ' saveFile: cannot save :' . $save_on . PHP_EOL;
 // ./gcsr.php http://www.fititnt.org urls_test.txt
-$gcsr->set('google_cache_use', false)->set('wait_min', 3)->set('wait_max', 5);
-
+//$gcsr->set('google_cache_use', false)->set('wait_min', 3)->set('wait_max', 5);
+//$gcsr->set('wait_min', 3)->set('wait_max', 5);
 $gcsr->set('base_site', $argv[1])->set('url_file', $argv[2])->execute();
 
 //$gcsr->importParam('ignore', ['ignore.txt']);
