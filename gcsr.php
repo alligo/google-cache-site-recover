@@ -2,7 +2,7 @@
 
 <?php
 
-class GCacheCrawler
+class GoogleCacheSiteRecover
 {
 
     /**
@@ -39,12 +39,12 @@ class GCacheCrawler
     protected $google_cache_use = true;
     protected $ignore = [];
     protected $ignore_file = 'ignore.txt';
-    protected $info_file_processed = 'gcachecrawler_processed.txt';
-    protected $info_file_lasttry = 'gcachecrawler_lastitem.txt';
-    protected $info_file_doneok = 'gcachecrawler_doneok.txt';
-    protected $info_file_done404 = 'gcachecrawler_done404.txt';
-    protected $info_file_error = 'gcachecrawler_error.txt';
-    protected $info_file_raw = 'gcachecrawler_raw.html';
+    protected $info_file_processed = 'gcsr_processed.txt';
+    protected $info_file_lasttry = 'gcsr_lastitem.txt';
+    protected $info_file_doneok = 'gcsr_doneok.txt';
+    protected $info_file_done404 = 'gcsr_done404.txt';
+    protected $info_file_error = 'gcsr_error.txt';
+    protected $info_file_raw = 'gcsr_raw.html';
 
     /**
      * Fake user agent. Default curl agent will get you banned
@@ -84,14 +84,14 @@ class GCacheCrawler
      *
      * @var Integer
      */
-    protected $wait_min = 10;
+    protected $wait_min = 63;
 
     /**
      * Maximum time, in seconds, to take page from google cache
      *
      * @var Integer
      */
-    protected $wait_max = 30;
+    protected $wait_max = 70;
     protected $proxy_file = 'proxy.txt';
     protected $proxy_enabled = false;
     protected $proxy_list = 'proxy.txt';
@@ -119,8 +119,15 @@ class GCacheCrawler
         } else {
             $parts = explode('style="position:relative;">', $string);
             $good_parts = array_splice($parts, 1);
+            $html_string = implode('', $good_parts);
+
+            // This part needs more testing, Force UTF8 encoding for google cache pages
+            if (strpos('charset=utf-8', $html_string) === false && strpos('charset=UTF-8', $html_string) === false) {
+                $html_string = str_replace('<head>', '<head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">', $html_string);
+            }
+
             echo gmdate("Y-m-d\TH:i:s\Z") . ' OK clearGoogleCacheHeader';
-            return implode('', $good_parts);
+            return $html_string;
         }
     }
 
@@ -181,19 +188,23 @@ class GCacheCrawler
     {
         $reqs_per_hour = '---';
 
+        $total = count($this->url_stack);
+
         foreach ($this->url_stack AS $url) {
             if ($this->debug_level) {
                 file_put_contents(getcwd() . '/' . $this->info_file_processed, $url . PHP_EOL, FILE_APPEND);
             }
             $this->request_count += 1;
             if ($this->request_count > 2) {
-                $reqs_per_hour = ((time() - $this->start_time) * $this->request_count) / 60;
+                $reqs_per_hour = ($this->request_count / (time() - $this->start_time)) * 60 * 60;
             }
 
             if ($this->google_cache_use) {
-                echo gmdate("Y-m-d\TH:i:s\Z") . ': REQUEST n ' . $this->request_count . ' from Google Cache ' . $reqs_per_hour . ' req/h. Next URL: ' . $url . PHP_EOL;
+                echo gmdate("Y-m-d\TH:i:s\Z") . ': REQUEST n ' . $this->request_count . ' of ' . $total
+                . ' from Google Cache ' . $reqs_per_hour . ' req/h. Next URL: ' . $url . PHP_EOL;
             } else {
-                echo gmdate("Y-m-d\TH:i:s\Z") . ': REQUEST n ' . $this->request_count . ' direct from site ' . $reqs_per_hour . ' req/h. Next URL: ' . $url . PHP_EOL;
+                echo gmdate("Y-m-d\TH:i:s\Z") . ': REQUEST n ' . $this->request_count . ' of ' . $total
+                . ' direct from site ' . $reqs_per_hour . ' req/h. Next URL: ' . $url . PHP_EOL;
             }
 
             $url_to_html_page = $this->google_cache_use ? $this->base_cache . $this->base_site . $url : $this->base_site . $url;
@@ -226,20 +237,21 @@ class GCacheCrawler
      */
     public function get($name)
     {
-        return $this->$name;
+        return isset($this->$name) ? $this->$name : null;
     }
 
     /**
-     * 
+     * Return full file path to save on disk for a file of the site
+     *
      * @param   String   $url_without_base
      * @return  String
      */
     protected function getSavePath($url_without_base)
     {
-        echo gmdate("Y-m-d\TH:i:s\Z") . ': getSavePath ' . $url_without_base . PHP_EOL;
-		$isempty = trim($url_without_base, '/');
+        //echo gmdate("Y-m-d\TH:i:s\Z") . ': getSavePath ' . $url_without_base . PHP_EOL;
+        $isempty = trim($url_without_base, '/');
         if (empty($isempty) || $url_without_base === $this->save_path) {
-            echo gmdate("Y-m-d\TH:i:s\Z") . ': getSavePath IS INDEX PAGE ' . PHP_EOL;
+            echo gmdate("Y-m-d\TH:i:s\Z") . ': getSavePath IS INDEX PAGE. Force save as index.html ' . PHP_EOL;
             return $this->save_path . '/index.html';
         } else {
             if ($this->force_html_sufix && !(
@@ -260,7 +272,6 @@ class GCacheCrawler
         $proxy_now = $this->proxy_list[0];
         echo gmdate("Y-m-d\TH:i:s\Z") . ': getProxy ' . $proxy_now . PHP_EOL;
         //curl_setopt($curl_handler, CURLOPT_PROXY, $proxy_now);
-        
         //return $curl_handler;
         return $proxy_now;
     }
@@ -303,6 +314,32 @@ class GCacheCrawler
         }
     }
 
+    public function importParam($param, $files)
+    {
+        $data = [];
+        if (!is_array($files)) {
+            if (strpos(',')) {
+                $files = array_map('trim', implode(',', $files));
+            } else {
+                $files = [$files];
+            }
+        }
+        foreach ($files AS $file) {
+            $array = [];
+            if (is_file($file) && is_readable($file)) {
+                $string = file_get_contents($file);
+                $array = explode(PHP_EOL, $string);
+                $data = array_merge($data, $array);
+            }
+        }
+        $data = array_unique($data);
+        if (count($data)) {
+            $this->$param = $data;
+        } else {
+            echo gmdate("Y-m-d\TH:i:s\Z") . ': WARNING importParam cannot import ' . json_encode($files);
+        }
+    }
+
     /**
      * Return contents of url
      *
@@ -312,7 +349,7 @@ class GCacheCrawler
      */
     protected function getUrlContents($url, $certificate = FALSE)
     {
-        echo gmdate("Y-m-d\TH:i:s\Z") . ': getUrlContents ' . $url . PHP_EOL;
+        //echo gmdate("Y-m-d\TH:i:s\Z") . ': getUrlContents ' . $url . PHP_EOL;
 
         $ch = curl_init();
 
@@ -335,7 +372,7 @@ class GCacheCrawler
         if (curl_errno($ch)) {
             echo gmdate("Y-m-d\TH:i:s\Z") . ': ERROR getUrlContents CURL_ERROR ' . curl_error($ch) . PHP_EOL;
         }
-        
+
         //print_r(curl_getinfo($ch));
 
         curl_close($ch);
@@ -358,6 +395,12 @@ class GCacheCrawler
         }
     }
 
+    /**
+     * Recursive create all directories need for salve a file
+     *
+     * @param  String  $file_path
+     * @return boolean
+     */
     protected function prepareFilePath($file_path)
     {
         $dir = dirname($file_path);
@@ -384,10 +427,10 @@ class GCacheCrawler
     }
 }
 
-$gcsr = new GCacheCrawler();
+$gcsr = new GoogleCacheSiteRecover();
 
 if (empty($argv) || count($argv) < 2) {
-    echo 'Usage: gcachecrawler.php http://site.com' . PHP_EOL;
+    echo 'Usage: gcsr.php http://site.com' . PHP_EOL;
     echo '       1º param: site url (no / at the end)' . PHP_EOL;
     echo '       2º param: file with urls (optimal, default to urls.txt)' . PHP_EOL;
     echo '       3º param: Google Cache URL (optimal, you can repeat site url again to direct from site)' . PHP_EOL;
@@ -401,6 +444,6 @@ if (empty($argv) || count($argv) < 2) {
     }
 }
 
-$gcsr->set('google_cache_use', false);
+//$gcsr->set('google_cache_use', false);
 
 $gcsr->set('base_site', $argv[1])->set('url_file', $argv[2])->execute();
