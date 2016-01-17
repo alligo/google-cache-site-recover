@@ -114,7 +114,7 @@ class GoogleCacheSiteRecover
     {
 
         if (strpos($string, 'style="position:relative;">') === false) {
-            echo gmdate("Y-m-d\TH:i:s\Z") . 'ERROR: clearGoogleCacheHeader method is outdated. Please update me!';
+            echo gmdate("Y-m-d\TH:i:s\Z") . ": \033[31mERROR\033[37m" . ' clearGoogleCacheHeader: method is outdated. Please update me!';
             return $string;
         } else {
             $parts = explode('style="position:relative;">', $string);
@@ -126,7 +126,7 @@ class GoogleCacheSiteRecover
                 $html_string = str_replace('<head>', '<head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">', $html_string);
             }
 
-            echo gmdate("Y-m-d\TH:i:s\Z") . ' OK clearGoogleCacheHeader';
+            echo gmdate("Y-m-d\TH:i:s\Z") . ' DEBUG clearGoogleCacheHeader: cleared';
             return $html_string;
         }
     }
@@ -146,12 +146,12 @@ class GoogleCacheSiteRecover
             if ($input) {
                 $this->url_stack = array_filter(explode("\n", $input));
                 if (empty($this->url_stack)) {
-                    echo gmdate("Y-m-d\TH:i:s\Z") . 'ERROR: url_file empty (' . $this->url_file . ')';
+                    echo gmdate("Y-m-d\TH:i:s\Z") . ": \033[31mERROR\033[37m" . ' execute: url_file empty (' . $this->url_file . ')';
                     die;
                 }
             }
         } else {
-            echo gmdate("Y-m-d\TH:i:s\Z") . 'ERROR: url_file not found! (' . $this->url_file . ')';
+            echo gmdate("Y-m-d\TH:i:s\Z") . ": \033[31mERROR\033[37m" . ' execute: url_file not found! (' . $this->url_file . ')';
             die;
         }
         if ($this->proxy_enabled) {
@@ -160,7 +160,7 @@ class GoogleCacheSiteRecover
                 if ($input) {
                     $this->proxy_list = array_filter(explode("\n", $input));
                     if (empty($this->proxy_list)) {
-                        echo gmdate("Y-m-d\TH:i:s\Z") . 'ERROR: proxy_list empty (' . $this->proxy_list . ')';
+                        echo gmdate("Y-m-d\TH:i:s\Z") . ": \033[31mERROR\033[37m" . ' execute: proxy_list empty (' . $this->proxy_list . ')';
                         die;
                     }
                 }
@@ -200,10 +200,10 @@ class GoogleCacheSiteRecover
             }
 
             if ($this->google_cache_use) {
-                echo gmdate("Y-m-d\TH:i:s\Z") . ': REQUEST n ' . $this->request_count . ' of ' . $total
+                echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executeCacheRequest: Request nº ' . $this->request_count . ' of ' . $total
                 . ' from Google Cache ' . $reqs_per_hour . ' req/h. Next URL: ' . $url . PHP_EOL;
             } else {
-                echo gmdate("Y-m-d\TH:i:s\Z") . ': REQUEST n ' . $this->request_count . ' of ' . $total
+                echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executeCacheRequest: Request nº ' . $total
                 . ' direct from site ' . $reqs_per_hour . ' req/h. Next URL: ' . $url . PHP_EOL;
             }
 
@@ -213,18 +213,18 @@ class GoogleCacheSiteRecover
             if ($result === false) {
                 $this->error_count_now += 1;
                 if ($this->error_count_now > $this->error_count_max) {
-                    echo gmdate("Y-m-d\TH:i:s\Z") . ': Too many errors. Stoping now' . PHP_EOL;
+                    echo gmdate("Y-m-d\TH:i:s\Z") . ": \033[31mCRITICAL\033[37m" . ' executeCacheRequest: Too many errors. Stoping now' . PHP_EOL;
                     die;
                 }
                 $sleep = $this->wait_error * $this->error_count_now;
-                echo gmdate("Y-m-d\TH:i:s\Z") . ': ERROR 5XX! ' . $sleep . 's' . PHP_EOL;
+                echo gmdate("Y-m-d\TH:i:s\Z") . ': ALERT executeCacheRequest: ERROR 5XX or 3XX! ' . $sleep . 's' . PHP_EOL;
             } else {
                 $sleep = rand($this->wait_min, $this->wait_max);
-                echo gmdate("Y-m-d\TH:i:s\Z") . ': wait for ' . $sleep . 's' . PHP_EOL;
+                echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executeCacheRequest: wait for ' . $sleep . 's' . PHP_EOL;
             }
             sleep($sleep);
         }
-        echo gmdate("Y-m-d\TH:i:s\Z") . ': Google Cache Site Recover finished' . PHP_EOL;
+        echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executeCacheRequest: Google Cache Site Recover finished' . PHP_EOL;
         die;
     }
 
@@ -240,6 +240,38 @@ class GoogleCacheSiteRecover
         return isset($this->$name) ? $this->$name : null;
     }
 
+    public function getHtmlResources($html_string)
+    {
+        $assets = [
+            'js' => [],
+            'css' => [],
+            'links' => [],
+        ];
+        libxml_use_internal_errors(true); // HTML5 ¯\_(ツ)_/¯
+        $doc = new DOMDocument();
+        if ($doc->loadHTML($html_string)) {
+            $dom = simplexml_import_dom($doc);
+            $xpath = new DOMXPath($doc);
+            $images = $xpath->query("//img");
+            $js = $xpath->query("//script");
+            $css = $xpath->query("//link");
+            //$src = $nodes->item(0)->getAttribute('src');
+            var_dump($images, $js, $css);
+            //echo $html_string;
+        }
+
+        return $assets;
+    }
+
+    protected function getProxy()
+    {
+        $proxy_now = $this->proxy_list[0];
+        echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO getProxy: ' . $proxy_now . PHP_EOL;
+        //curl_setopt($curl_handler, CURLOPT_PROXY, $proxy_now);
+        //return $curl_handler;
+        return $proxy_now;
+    }
+
     /**
      * Return full file path to save on disk for a file of the site
      *
@@ -251,7 +283,7 @@ class GoogleCacheSiteRecover
         //echo gmdate("Y-m-d\TH:i:s\Z") . ': getSavePath ' . $url_without_base . PHP_EOL;
         $isempty = trim($url_without_base, '/');
         if (empty($isempty) || $url_without_base === $this->save_path) {
-            echo gmdate("Y-m-d\TH:i:s\Z") . ': getSavePath IS INDEX PAGE. Force save as index.html ' . PHP_EOL;
+            echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO getSavePath: Is page index. Force save as index.html ' . PHP_EOL;
             return $this->save_path . '/index.html';
         } else {
             if ($this->force_html_sufix && !(
@@ -259,21 +291,12 @@ class GoogleCacheSiteRecover
                 strpos($url_without_base, '.htm') !== false ||
                 strpos($url_without_base, '.php') !== false
                 )) {
-                echo gmdate("Y-m-d\TH:i:s\Z") . ': getSavePath FORCE HTML ' . PHP_EOL;
+                echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO getSavePath FORCE HTML ' . PHP_EOL;
                 return $this->save_path . $url_without_base . '.html';
             } else {
                 return $this->save_path . $url_without_base;
             }
         }
-    }
-
-    protected function getProxy()
-    {
-        $proxy_now = $this->proxy_list[0];
-        echo gmdate("Y-m-d\TH:i:s\Z") . ': getProxy ' . $proxy_now . PHP_EOL;
-        //curl_setopt($curl_handler, CURLOPT_PROXY, $proxy_now);
-        //return $curl_handler;
-        return $proxy_now;
     }
 
     /**
@@ -287,7 +310,7 @@ class GoogleCacheSiteRecover
     {
 
         $content = $this->getUrlContents($url);
-        echo gmdate("Y-m-d\TH:i:s\Z") . ': URL GET, STATUS ' . $this->status_code . '; URL: ' . $url . '; SAVE_ON: ' . $save_on . PHP_EOL;
+        echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO getUrl: Status ' . $this->status_code . '; URL: ' . $url . '; SAVE_ON: ' . $save_on . PHP_EOL;
         switch ($this->status_code) {
             case 200:
                 //case 302:
@@ -295,6 +318,10 @@ class GoogleCacheSiteRecover
                     $this->saveHtml($this->clearGoogleCacheHeader($content), $save_on);
                 } else {
                     $this->saveHtml($content, $save_on);
+                }
+                $assets = $this->getHtmlResources($content);
+                if (!empty($assets)) {
+                    //
                 }
 
                 if ($this->debug_level) {
@@ -311,32 +338,6 @@ class GoogleCacheSiteRecover
                     file_put_contents(getcwd() . '/' . $this->info_file_error, $url . PHP_EOL, FILE_APPEND);
                 }
                 return false;
-        }
-    }
-
-    public function importParam($param, $files)
-    {
-        $data = [];
-        if (!is_array($files)) {
-            if (strpos(',')) {
-                $files = array_map('trim', implode(',', $files));
-            } else {
-                $files = [$files];
-            }
-        }
-        foreach ($files AS $file) {
-            $array = [];
-            if (is_file($file) && is_readable($file)) {
-                $string = file_get_contents($file);
-                $array = explode(PHP_EOL, $string);
-                $data = array_merge($data, $array);
-            }
-        }
-        $data = array_unique($data);
-        if (count($data)) {
-            $this->$param = $data;
-        } else {
-            echo gmdate("Y-m-d\TH:i:s\Z") . ': WARNING importParam cannot import ' . json_encode($files);
         }
     }
 
@@ -370,7 +371,7 @@ class GoogleCacheSiteRecover
             file_put_contents(getcwd() . '/' . $this->info_file_raw, $content);
         }
         if (curl_errno($ch)) {
-            echo gmdate("Y-m-d\TH:i:s\Z") . ': ERROR getUrlContents CURL_ERROR ' . curl_error($ch) . PHP_EOL;
+            echo gmdate("Y-m-d\TH:i:s\Z") . ": \033[31mERROR\033[37m" . ' getUrlContents CURL_ERROR ' . curl_error($ch) . PHP_EOL;
         }
 
         //print_r(curl_getinfo($ch));
@@ -380,19 +381,39 @@ class GoogleCacheSiteRecover
     }
 
     /**
-     * 
-     * @param   String   $content
-     * @param   String   $save_on
+     * For a list of files, read then, convert to array, control caracters
+     * and then save then on a internal variable
+     *
+     * @param   String        $param
+     * @param   String|Array  $files
+     * @returns Array
      */
-    protected function saveHtml($content, $save_on)
+    public function importParam($param, $files)
     {
-        echo gmdate("Y-m-d\TH:i:s\Z") . ' saveHtml :' . $save_on . PHP_EOL;
-        if ($this->prepareFilePath($save_on)) {
-            echo gmdate("Y-m-d\TH:i:s\Z") . ' saveHtml file_path OK :' . $save_on . PHP_EOL;
-            if (!file_put_contents($save_on, $content)) {
-                echo gmdate("Y-m-d\TH:i:s\Z") . ' ERROR! saveHtml cannot save :' . $save_on . PHP_EOL;
+        $data = [];
+        if (!is_array($files)) {
+            if (strpos(',')) {
+                $files = array_map('trim', implode(',', $files));
+            } else {
+                $files = [$files];
             }
         }
+        foreach ($files AS $file) {
+            $array = [];
+            if (is_file($file) && is_readable($file)) {
+                $string = file_get_contents($file);
+                $array = explode(PHP_EOL, $string);
+                $data = array_merge($data, $array);
+            }
+        }
+        $data = array_unique(array_filter($data));
+        var_dump(count($data));
+        if (count($data)) {
+            $this->$param = $data;
+        } else {
+            echo gmdate("Y-m-d\TH:i:s\Z") . ': WARNING importParam cannot import ' . json_encode($files);
+        }
+        return isset($this->$param) ? $this->$param : null;
     }
 
     /**
@@ -406,11 +427,27 @@ class GoogleCacheSiteRecover
         $dir = dirname($file_path);
         if (!is_dir($dir)) {
             if (!mkdir($dir, 0755, true)) {
-                echo gmdate("Y-m-d\TH:i:s\Z") . ' ERROR! prepareFilePath  cannot create ' . $dir . ' for file ' . $file_path . PHP_EOL;
+                echo gmdate("Y-m-d\TH:i:s\Z") . ": \033[31mERROR\033[37m" . ' prepareFilePath  cannot create ' . $dir . ' for file ' . $file_path . PHP_EOL;
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * 
+     * @param   String   $content
+     * @param   String   $save_on
+     */
+    protected function saveHtml($content, $save_on)
+    {
+        //echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO saveHtml: ' . $save_on . PHP_EOL;
+        if ($this->prepareFilePath($save_on)) {
+            //echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO saveHtml:  file_path OK :' . $save_on . PHP_EOL;
+            if (!file_put_contents($save_on, $content)) {
+                echo gmdate("Y-m-d\TH:i:s\Z") . ": \033[31mERROR\033[37m" . ' saveHtml: cannot save :' . $save_on . PHP_EOL;
+            }
+        }
     }
 
     /**
@@ -443,7 +480,11 @@ if (empty($argv) || count($argv) < 2) {
         $gcsr->set('google_cache_use', false);
     }
 }
-
-//$gcsr->set('google_cache_use', false);
+//echo gmdate("Y-m-d\TH:i:s\Z") . ": \033[31mERROR\033[37m" . ' saveHtml: cannot save :' . $save_on . PHP_EOL;
+// ./gcsr.php http://www.fititnt.org urls_test.txt
+$gcsr->set('google_cache_use', false)->set('wait_min', 3)->set('wait_max', 5);
 
 $gcsr->set('base_site', $argv[1])->set('url_file', $argv[2])->execute();
+
+//$gcsr->importParam('ignore', ['ignore.txt']);
+//var_dump($gcsr->get('ignore'));

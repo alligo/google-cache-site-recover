@@ -1,9 +1,11 @@
 nbproject
 output/
 urls.txt
-gcachecrawler_processed.txt
-gcachecrawler_lastitem.txt
-gcachecrawler_doneok.txt
-gcachecrawler_done404.txt
-gcachecrawler_raw.html
+ignore.txt
+gcsr_processed.txt
+gcsr_lastitem.txt
+gcsr_doneok.txt
+gcsr_done404.txt
+gcsr_error.txt
+gcsr_raw.html
 *.zip
