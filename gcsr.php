@@ -240,6 +240,11 @@ class GoogleCacheSiteRecover
         return isset($this->$name) ? $this->$name : null;
     }
 
+    /**
+     * @deprecated
+     * @param type $html_string
+     * @return array
+     */
     public function getHtmlResources($html_string)
     {
         $assets = [
@@ -319,9 +324,12 @@ class GoogleCacheSiteRecover
                 } else {
                     $this->saveHtml($content, $save_on);
                 }
-                $assets = $this->getHtmlResources($content);
-                if (!empty($assets)) {
-                    //
+                $htmlhelper = new HtmlHelper($content);
+                if ($htmlhelper->isValid()) {
+                    $htmlhelper->setBaseUrl($this->base_site);
+                    //var_dump($htmlhelper->getLinkImages());
+                    //var_dump($htmlhelper->getLinkJavascript());
+                    //var_dump($htmlhelper->getLinkCSS());
                 }
 
                 if ($this->debug_level) {
@@ -460,6 +468,123 @@ class GoogleCacheSiteRecover
     public function set($name, $value)
     {
         $this->$name = $value;
+        return $this;
+    }
+}
+
+class HtmlHelper
+{
+
+    protected $base_url = '';
+
+    /**
+     *
+     * @var \DOMElement
+     */
+    protected $a_nodes;
+
+    /**
+     *
+     * @var \DOMElement
+     */
+    protected $css_nodes;
+    protected $dom;
+    protected $html_string;
+
+    /**
+     *
+     * @var \DOMElement
+     */
+    protected $js_nodes;
+    protected $img_nodes;
+
+    /**
+     *
+     * @var \DOMElement
+     */
+    protected $is_valid = false;
+
+    public function __construct($html_string)
+    {
+        libxml_use_internal_errors(true); // HTML5 ¯\_(ツ)_/¯
+        $doc = new DOMDocument();
+        if ($doc->loadHTML($html_string)) {
+            $dom = simplexml_import_dom($doc);
+            $xpath = new DOMXPath($doc);
+            $this->img_nodes = $xpath->query("//img");
+            $this->js_nodes = $xpath->query("//script");
+            $this->css_nodes = $xpath->query("//link[@rel=stylesheet]");
+            $this->css_nodes = $xpath->query("//link[@rel='stylesheet']");
+            //$this->css_nodes = $xpath->query("//link");
+            //var_dump($this->css_nodes); die;
+            //$src = $nodes->item(0)->getAttribute('src');
+            //var_dump($this->img_nodes, $this->js_nodes, $this->css_nodes);
+            //echo $html_string;
+            $this->is_valid = true;
+        }
+    }
+
+    public function isValid()
+    {
+        return $this->is_valid;
+    }
+
+    public function getLinkCSS($loca_only = true)
+    {
+        $links = [];
+        //var_dump(($this->css_nodes->item(0)));
+        //var_dump($this->css_nodes[0]);
+        //var_dump(count($this->css_nodes));
+        //die('oioi');
+        foreach ($this->css_nodes AS $node) {
+            $href = $node->getAttribute('href');
+
+            if (empty($src) || (strpos($src, '//') !== false && strpos($src, $this->base_url) === false)) {
+                // Empty or remote url
+                continue;
+            }
+            //var_dump($node);
+
+            $links[] = $href;
+        }
+        //var_dump(count($this->css_nodes));
+        //var_dump($links);
+        return $links;
+    }
+
+    public function getLinkImages($loca_only = true)
+    {
+        $urls = [];
+        foreach ($this->img_nodes AS $node) {
+            // No inline images
+            if (strpos($node->getAttribute('src'), 'base64') === false) {
+                
+            }
+        }
+    }
+
+    public function getLinkJavascript($loca_only = true)
+    {
+        $urls = [];
+        foreach ($this->js_nodes AS $node) {
+            // No inline images
+            $src = $node->getAttribute('src');
+            if (empty($src) || (strpos($src, '//') !== false && strpos($src, $this->base_url) === false)) {
+                // Empty or remote url
+                continue;
+            }
+
+            // Remove base URL to normatize output. Maybe this is not necessary. No time to test now
+            $src = str_replace($this->base_url, '', $src);
+
+            $urls[] = $src;
+        }
+        return $urls;
+    }
+
+    public function setBaseUrl($url)
+    {
+        $this->base_url = $url;
         return $this;
     }
 }
