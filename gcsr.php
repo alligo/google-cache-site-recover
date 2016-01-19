@@ -378,6 +378,7 @@ class GoogleCacheSiteRecover
                 }
                 return true;
             case 404:
+            case 400:
                 if ($this->debug_level) {
                     file_put_contents(getcwd() . '/' . $this->info_file_done404, $url . PHP_EOL, FILE_APPEND);
                 }
