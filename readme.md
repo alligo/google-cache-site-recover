@@ -1,4 +1,4 @@
-# Google Cache Site Recover - v0.4 Alpha
+# Google Cache Site Recover - v0.5 Alpha
 
 This script is a way to recover a **static version** of your site if you are
 out of luck and have no recent backups. Take a list of URLs of your site,

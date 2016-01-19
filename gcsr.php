@@ -145,7 +145,7 @@ class GoogleCacheSiteRecover
                 $html_string = str_replace('<head>', '<head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">', $html_string);
             }
 
-            echo gmdate("Y-m-d\TH:i:s\Z") . ' DEBUG clearGoogleCacheHeader: cleared' . PHP_EOL;
+            echo gmdate("Y-m-d\TH:i:s\Z") . ': DEBUG clearGoogleCacheHeader: cleared' . PHP_EOL;
             return $html_string;
         }
     }
@@ -158,7 +158,7 @@ class GoogleCacheSiteRecover
         //$this->debug_level && print_r($this);
         $this->start_time = time();
 
-        echo gmdate("Y-m-d\TH:i:s\Z") . ': Google Cache Site Recover version 0.2 started now' . PHP_EOL;
+        echo gmdate("Y-m-d\TH:i:s\Z") . ': Google Cache Site Recover version 0.5 started now' . PHP_EOL;
 
         if (is_file($this->url_file)) {
             $input = file_get_contents($this->url_file);
@@ -201,7 +201,7 @@ class GoogleCacheSiteRecover
         if ($htmlhelper->isValid()) {
             $htmlhelper->setBaseUrl($this->base_site);
             $assets = array_filter(array_merge($htmlhelper->getLinkImages(), $htmlhelper->getLinkJavascript(), $htmlhelper->getLinkCSS()));
-            echo gmdate("Y-m-d\TH:i:s\Z") . ' INFO executePageAssets: possible local Assets found ' . count($assets) . PHP_EOL;
+            echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executePageAssets: possible local Assets found ' . count($assets) . PHP_EOL;
             //var_dump($assets);
             foreach ($assets AS $asset) {
                 if (!$this->isUrlIgnore($asset)) {
@@ -252,11 +252,14 @@ class GoogleCacheSiteRecover
         $reqs_per_hour = '---';
 
         $total = count($this->url_stack);
+        $ignored = 0;
 
         foreach ($this->url_stack AS $url) {
 
             if ($this->isUrlIgnore($url)) {
+                $ignored += 1;
                 echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executeCacheRequest: ignoring ' . $url . PHP_EOL;
+                continue;
             }
 
             if ($this->debug_level) {
@@ -268,10 +271,10 @@ class GoogleCacheSiteRecover
             }
 
             if ($this->google_cache_use) {
-                echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executeCacheRequest: Request nº ' . $this->request_count . ' of ' . $total
+                echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executeCacheRequest: [' . ($this->request_count + $ignored) . '] Request nº ' . $this->request_count . ' of ' . $total
                 . ' from Google Cache ' . $reqs_per_hour . ' req/h. Next URL: ' . $url . PHP_EOL;
             } else {
-                echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executeCacheRequest: Request nº ' . $this->request_count . ' of ' . $total
+                echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO executeCacheRequest: [' . ($this->request_count + $ignored) . '] Request nº ' . $this->request_count . ' of ' . $total
                 . ' direct from site ' . $reqs_per_hour . ' req/h. Next URL: ' . $url . PHP_EOL;
             }
 
@@ -748,6 +751,19 @@ if (empty($argv) || count($argv) < 2) {
 // ./gcsr.php http://www.fititnt.org urls_test.txt
 //$gcsr->set('google_cache_use', false)->set('wait_min', 3)->set('wait_max', 5);
 //$gcsr->set('wait_min', 3)->set('wait_max', 5);
+$ignore = [];
+if (is_file('ignore.txt')) {
+    echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO ignoring file ignore.txt' . PHP_EOL;
+    $ignore[] = 'ignore.txt';
+}
+if (is_file('gcsr_processed.txt')) {
+    echo gmdate("Y-m-d\TH:i:s\Z") . ': INFO ignoring file gcsr_processed.txt' . PHP_EOL;
+    $ignore[] = 'gcsr_processed.txt';
+}
+if (count($ignore)) {
+    $gcsr->importParam('ignore', $ignore);
+}
+
 $gcsr->set('base_site', $argv[1])->set('url_file', $argv[2])->execute();
 
 //$gcsr->importParam('ignore', ['ignore.txt']);
